@@ -9,7 +9,7 @@
 set -Eeuo pipefail
 umask 077
 
-SCRIPT_VERSION="1.0.6"
+SCRIPT_VERSION="1.0.7"
 ENV_FILE=""
 TMP_DIR=""
 
@@ -246,6 +246,7 @@ ROUTER_HOME="$SERVICE_HOME/.local/open-free-router"
 ROUTER_CONFIG_DIR="$SERVICE_HOME/.config/open-free-router"
 ROUTER_CONFIG="$ROUTER_CONFIG_DIR/config.yaml"
 ROUTER_REGISTRY="$ROUTER_CONFIG_DIR/registry.yaml"
+ROUTER_RUNTIME_HOME="$SERVICE_HOME/.local/share/open-free-router-runtime"
 WORKSPACE_DIR="$SERVICE_HOME/workspace"
 
 # 先显式创建并归属顶层用户目录。`install -d /home/u/.local/bin` 在部分
@@ -255,7 +256,7 @@ install -d -m 700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" \
   "$SERVICE_HOME/.local" "$SERVICE_HOME/.config" "$SERVICE_HOME/.cache"
 install -d -m 700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" \
   "$HERMES_HOME" "$ROUTER_CONFIG_DIR" "$WORKSPACE_DIR" \
-  "$SERVICE_HOME/.local/bin" "$SERVICE_HOME/.local/share"
+  "$SERVICE_HOME/.local/bin" "$SERVICE_HOME/.local/share" "$ROUTER_RUNTIME_HOME"
 
 # 更新/修复前先停止已有 Gateway。旧 unit 通常配置 Restart=always；如果它
 # 在 chown 或替换 venv 的过程中反复拉起，会重新生成 root 所有的缓存文件，
@@ -441,8 +442,12 @@ Before=hermes-gateway.service
 Type=simple
 User=$SERVICE_USER
 Group=$SERVICE_GROUP
-WorkingDirectory=$ROUTER_HOME
-Environment=HOME=$SERVICE_HOME
+# open-free-router 的 serve 会在启动/定时刷新时把旧版 custom_providers
+# 自动同步进 ~/.hermes/config.yaml，并且可能误把上游真实 Key 写进去。
+# 给 Router 独立 HOME，同时从真实配置目录启动；这样代理仍读取 config.yaml，
+# 但它的 agent sync 只能写入隔离目录，Hermes 配置由本脚本单独管理。
+WorkingDirectory=$ROUTER_CONFIG_DIR
+Environment=HOME=$ROUTER_RUNTIME_HOME
 Environment=PYTHONUNBUFFERED=1
 ExecStart=$ROUTER_BIN serve
 Restart=always
