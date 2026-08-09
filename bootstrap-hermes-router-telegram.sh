@@ -9,7 +9,7 @@
 set -Eeuo pipefail
 umask 077
 
-SCRIPT_VERSION="1.0.4"
+SCRIPT_VERSION="1.0.5"
 ENV_FILE=""
 TMP_DIR=""
 
@@ -256,6 +256,16 @@ install -d -m 700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" \
 install -d -m 700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" \
   "$HERMES_HOME" "$ROUTER_CONFIG_DIR" "$WORKSPACE_DIR" \
   "$SERVICE_HOME/.local/bin" "$SERVICE_HOME/.local/share"
+
+# 更新/修复前先停止已有 Gateway。旧 unit 通常配置 Restart=always；如果它
+# 在 chown 或替换 venv 的过程中反复拉起，会重新生成 root 所有的缓存文件，
+# 也可能在安装器删除旧 venv 时制造竞态。
+for existing_unit in hermes-gateway.service hermes.service; do
+  if systemctl cat "$existing_unit" >/dev/null 2>&1; then
+    log "停止已有服务：$existing_unit"
+    systemctl stop "$existing_unit" || true
+  fi
+done
 
 # 支持从中断/旧版本安装中恢复：root 调用过 Hermes CLI 后，现有 venv、
 # logs 或 __pycache__ 可能归 root 所有，导致无特权安装器连旧 venv 都删不掉。
