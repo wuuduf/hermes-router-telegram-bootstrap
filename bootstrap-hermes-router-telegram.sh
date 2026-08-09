@@ -9,7 +9,7 @@
 set -Eeuo pipefail
 umask 077
 
-SCRIPT_VERSION="1.0.5"
+SCRIPT_VERSION="1.0.6"
 ENV_FILE=""
 TMP_DIR=""
 
@@ -320,7 +320,10 @@ case "${INSTALL_BROWSER,,}" in
   1|true|yes) ;;
   *) HERMES_INSTALL_ARGS+=(--skip-browser) ;;
 esac
-as_service_user bash "$HERMES_INSTALLER" "${HERMES_INSTALL_ARGS[@]}" </dev/null
+# setsid 去掉控制终端。Hermes 官方安装器检测到旧 .env 中已有 Telegram
+# Token 时会直接从 /dev/tty 询问是否安装 Gateway，仅重定向 stdin 仍会卡住。
+# 本脚本稍后会按 system scope 安装 Gateway，因此这里让官方安装器跳过询问。
+as_service_user setsid --wait bash "$HERMES_INSTALLER" "${HERMES_INSTALL_ARGS[@]}" </dev/null
 
 HERMES_BIN="$SERVICE_HOME/.local/bin/hermes"
 if [[ ! -x "$HERMES_BIN" ]]; then
@@ -336,6 +339,13 @@ if [[ -x "$HERMES_HOME/bin/uv" ]]; then
 else
   as_service_user "$HERMES_INSTALL_DIR/venv/bin/python" -m ensurepip --upgrade
   as_service_user "$HERMES_INSTALL_DIR/venv/bin/python" -m pip install -e "$HERMES_INSTALL_DIR[messaging]"
+fi
+
+# 先迁移旧版 Hermes 配置，再写入本脚本管理的 Provider。这样旧的
+# custom_providers 条目不会在后续加载时被迁移成重复 Provider。
+log "迁移 Hermes 配置到当前版本"
+if ! as_service_user_timeout 180 "$HERMES_BIN" doctor --fix; then
+  warn "Hermes doctor --fix 未完全成功；继续写入当前配置"
 fi
 
 log "安装/更新 open-free-router"
@@ -528,15 +538,34 @@ else:
 if not isinstance(data, dict):
     data = {}
 
-providers = data.setdefault("providers", {})
+providers = data.get("providers")
+if not isinstance(providers, dict):
+    providers = {}
+
+# doctor --fix 可能把旧 custom_providers 迁移成 open-free-router-0 等名称。
+# 先按名称或端点删除所有同源条目，再只写入一个规范 Provider。
+router_endpoint = "http://127.0.0.1:8337/v1"
+for provider_name, provider_config in list(providers.items()):
+    provider_api = ""
+    if isinstance(provider_config, dict):
+        provider_api = str(
+            provider_config.get("api", provider_config.get("base_url", ""))
+        ).rstrip("/")
+    if (
+        str(provider_name) in {"open-free-router", "open_free_router"}
+        or provider_api == router_endpoint
+    ):
+        providers.pop(provider_name, None)
+
 providers["open-free-router"] = {
     "name": "open-free-router",
-    "api": "http://127.0.0.1:8337/v1",
+    "api": router_endpoint,
     "api_key": "sk-local",
     "transport": "chat_completions",
     "default_model": model_id,
     "discover_models": True,
 }
+data["providers"] = providers
 
 # 清掉本脚本旧版本/open-free-router sync 可能留下的同名 legacy 条目，
 # 避免 /model 菜单出现两个指向同一端点的 Provider。
@@ -549,7 +578,7 @@ if isinstance(legacy, list):
             and (
                 str(item.get("name", "")) in {"open-free-router", "open_free_router"}
                 or str(item.get("base_url", item.get("api", ""))).rstrip("/")
-                   == "http://127.0.0.1:8337/v1"
+                   == router_endpoint
             )
         )
     ]
