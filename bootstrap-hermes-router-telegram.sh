@@ -9,7 +9,7 @@
 set -Eeuo pipefail
 umask 077
 
-SCRIPT_VERSION="1.0.1"
+SCRIPT_VERSION="1.0.2"
 ENV_FILE=""
 TMP_DIR=""
 
@@ -273,13 +273,15 @@ for proxy_var in HTTP_PROXY HTTPS_PROXY NO_PROXY http_proxy https_proxy no_proxy
 done
 
 as_service_user() {
-  runuser -u "$SERVICE_USER" -- env -i "${USER_ENV[@]}" "$@"
+  runuser -u "$SERVICE_USER" -- env -i "${USER_ENV[@]}" \
+    bash -c 'cd "$HOME" && exec "$@"' _ "$@"
 }
 
 as_service_user_timeout() {
   local duration="$1"
   shift
-  timeout "$duration" runuser -u "$SERVICE_USER" -- env -i "${USER_ENV[@]}" "$@"
+  timeout "$duration" runuser -u "$SERVICE_USER" -- env -i "${USER_ENV[@]}" \
+    bash -c 'cd "$HOME" && exec "$@"' _ "$@"
 }
 
 HERMES_INSTALLER="$TMP_DIR/hermes-install.sh"
