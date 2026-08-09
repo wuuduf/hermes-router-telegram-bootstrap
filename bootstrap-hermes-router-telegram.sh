@@ -9,7 +9,7 @@
 set -Eeuo pipefail
 umask 077
 
-SCRIPT_VERSION="1.0.2"
+SCRIPT_VERSION="1.0.3"
 ENV_FILE=""
 TMP_DIR=""
 
@@ -666,8 +666,13 @@ env \
     --system \
     --run-as-user "$SERVICE_USER" \
     --force \
-    --start-now \
+    --no-start-now \
     --start-on-login
+
+# 上面的 system-scope 安装命令必须由 root 执行；Python 导入和日志初始化
+# 可能在 HERMES_HOME 内留下 root 所有的 __pycache__/logs。正式启动无特权
+# gateway 前，统一把这个专用账号的 Hermes 树归还给它。
+chown -R "$SERVICE_USER:$SERVICE_GROUP" "$HERMES_HOME"
 
 install -d -m 755 /etc/systemd/system/hermes-gateway.service.d
 cat > /etc/systemd/system/hermes-gateway.service.d/open-free-router.conf <<'EOF'
