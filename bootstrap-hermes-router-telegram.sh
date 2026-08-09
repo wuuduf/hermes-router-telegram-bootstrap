@@ -9,7 +9,7 @@
 set -Eeuo pipefail
 umask 077
 
-SCRIPT_VERSION="1.0.0"
+SCRIPT_VERSION="1.0.1"
 ENV_FILE=""
 TMP_DIR=""
 
@@ -248,8 +248,14 @@ ROUTER_CONFIG="$ROUTER_CONFIG_DIR/config.yaml"
 ROUTER_REGISTRY="$ROUTER_CONFIG_DIR/registry.yaml"
 WORKSPACE_DIR="$SERVICE_HOME/workspace"
 
+# 先显式创建并归属顶层用户目录。`install -d /home/u/.local/bin` 在部分
+# coreutils 版本上只会给最终的 bin 应用 -o/-g，中间的 .local 仍可能是
+# root:root，进而导致 uv 无法创建 ~/.local/share/uv/python。
 install -d -m 700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" \
-  "$HERMES_HOME" "$ROUTER_CONFIG_DIR" "$WORKSPACE_DIR" "$SERVICE_HOME/.local/bin"
+  "$SERVICE_HOME/.local" "$SERVICE_HOME/.config" "$SERVICE_HOME/.cache"
+install -d -m 700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" \
+  "$HERMES_HOME" "$ROUTER_CONFIG_DIR" "$WORKSPACE_DIR" \
+  "$SERVICE_HOME/.local/bin" "$SERVICE_HOME/.local/share"
 
 USER_ENV=(
   "HOME=$SERVICE_HOME"
