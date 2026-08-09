@@ -1,0 +1,9 @@
+# Local secrets
+*.env
+!hermes-router.env.example
+
+# Generated bundles and editor files
+*.tar.gz
+.DS_Store
+*.swp
+
