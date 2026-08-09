@@ -9,7 +9,7 @@
 set -Eeuo pipefail
 umask 077
 
-SCRIPT_VERSION="1.0.3"
+SCRIPT_VERSION="1.0.4"
 ENV_FILE=""
 TMP_DIR=""
 
@@ -256,6 +256,10 @@ install -d -m 700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" \
 install -d -m 700 -o "$SERVICE_USER" -g "$SERVICE_GROUP" \
   "$HERMES_HOME" "$ROUTER_CONFIG_DIR" "$WORKSPACE_DIR" \
   "$SERVICE_HOME/.local/bin" "$SERVICE_HOME/.local/share"
+
+# 支持从中断/旧版本安装中恢复：root 调用过 Hermes CLI 后，现有 venv、
+# logs 或 __pycache__ 可能归 root 所有，导致无特权安装器连旧 venv 都删不掉。
+chown -R "$SERVICE_USER:$SERVICE_GROUP" "$HERMES_HOME"
 
 USER_ENV=(
   "HOME=$SERVICE_HOME"
